@@ -2,6 +2,7 @@
 import { CODES, DeskError } from "../lib/errors.mjs";
 import { probe } from "../lib/probe.mjs";
 import { prepareRuntime } from "../lib/runtime.mjs";
+import { prepareQuery } from "../lib/query-layer.mjs";
 
 const [, , cmd, ...rest] = process.argv;
 
@@ -34,6 +35,15 @@ async function main() {
       root: f.root,
       offlineDir: f.offline,
       onEvent: (e) => process.stderr.write(JSON.stringify(e) + "\n"),
+    });
+    process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
+    return 0;
+  }
+  if (cmd === "prepare-query") {
+    const f = flags(rest);
+    const result = await prepareQuery({
+      sourceDir: f.source ?? new URL("../vendor/wechat-decrypt", import.meta.url).pathname,
+      root: f.root,
     });
     process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
     return 0;
