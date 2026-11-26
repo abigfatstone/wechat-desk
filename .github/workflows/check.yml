@@ -16,11 +16,5 @@ jobs:
           python-version: "3.12"
       - name: SQLCipher
         run: brew install sqlcipher
-      - name: Diagnose query layer
-        continue-on-error: true
-        run: |
-          cd vendor/wechat-decrypt
-          python3 -c "import sys; print(sys.version)"
-          python3 scripts/common/query.py list --json; echo "exit=$?"
       - name: Tests
         run: node --test test/*.test.mjs

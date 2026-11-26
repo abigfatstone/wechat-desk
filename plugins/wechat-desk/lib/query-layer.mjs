@@ -43,17 +43,20 @@ async function isFile(path) {
   }
 }
 
-// "Runs" means: either it produced JSON, or it failed the way a keyless layer
-// fails. A syntax error or a missing module means the copy is unusable, and
-// saying so now beats an IO_ERROR three steps later.
-function runsWithoutKey({ code, stdout, stderr }) {
+// "Runs" means: it produced JSON, or it stopped at a state this machine is
+// allowed to be in (no key yet, no WeChat data yet). A syntax error or a missing
+// module means the copy is unusable, and saying so now beats an IO_ERROR later.
+const RUNS_WITHOUT_KEY = /密钥文件不存在|密钥格式无效/;
+const RUNS_WITHOUT_DATA = /未找到 WeChat 数据目录|未找到 contact\.db/;
+
+function runsWithoutKey({ stdout, stderr }) {
   try {
     const parsed = JSON.parse(stdout.trim());
     if (parsed && typeof parsed === "object") return true;
   } catch {
     /* fall through to the stderr check */
   }
-  return /密钥文件不存在|密钥格式无效/.test(stderr);
+  return RUNS_WITHOUT_KEY.test(stderr) || RUNS_WITHOUT_DATA.test(stderr);
 }
 
 async function smoke(target, python) {
@@ -125,5 +128,5 @@ export async function prepareQuery(opts) {
   const build = `commit=${commit}\nkey=key.txt\nhash=${sha256}\n`;
   await writeFile(join(target, "BUILD"), build, { mode: 0o644 });
 
-  return { root, commit, sha256 };
+  return { root, commit, sha256, dataPresent: !RUNS_WITHOUT_DATA.test(outcome.stderr) };
 }
