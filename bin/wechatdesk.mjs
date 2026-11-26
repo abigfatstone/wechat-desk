@@ -1,93 +1,116 @@
 #!/usr/bin/env node
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CODES, DeskError } from "../lib/errors.mjs";
 import { probe } from "../lib/probe.mjs";
 import { prepareRuntime } from "../lib/runtime.mjs";
 import { prepareQuery } from "../lib/query-layer.mjs";
 import { verifyKey } from "../lib/verify-key.mjs";
 import { queryOnce } from "../lib/query.mjs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
-const [, , cmd, ...rest] = process.argv;
+const DEFAULT_ROOT = join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
 
-function flags(argv) {
+// Flags carry values except the few that are switches. An unknown flag is an
+// error, not something to ignore: `--key <raw>` typed at a shell must never be
+// swallowed and left in the process list.
+const SWITCHES = new Set(["json"]);
+const ALLOWED = {
+  probe: ["app-path", "data-root", "root", "json"],
+  "prepare-runtime": ["root", "offline", "json"],
+  "prepare-query": ["root", "source", "json"],
+  "verify-key": ["root", "db", "key-file", "json"],
+  query: ["root", "value", "days", "limit", "offset", "json"],
+};
+
+function parse(cmd, argv) {
+  const allowed = new Set(ALLOWED[cmd] ?? []);
   const out = {};
   for (let i = 0; i < argv.length; i++) {
-    const key = argv[i];
-    if (!key.startsWith("--")) throw new DeskError("BAD_ARGS", { arg: key });
+    const token = argv[i];
+    if (!token.startsWith("--")) throw new DeskError("BAD_ARGS", { arg: token });
+    const name = token.slice(2);
+    if (!allowed.has(name)) throw new DeskError("BAD_ARGS", { arg: token });
+    if (SWITCHES.has(name)) {
+      out[name] = true;
+      continue;
+    }
     const value = argv[i + 1];
-    if (value === undefined || value.startsWith("--")) throw new DeskError("BAD_ARGS", { arg: key });
-    out[key.slice(2)] = value;
+    if (value === undefined || value.startsWith("--")) throw new DeskError("BAD_ARGS", { arg: token });
+    out[name] = value;
     i++;
   }
   return out;
 }
 
-async function main() {
+const num = (v) => (v === undefined ? undefined : Number(v));
+
+async function run(cmd, f) {
+  const root = f.root ?? DEFAULT_ROOT;
+
   if (cmd === "probe") {
-    const f = flags(rest);
-    const result = await probe({
-      appPath: f["app-path"],
-      dataRoot: f["data-root"],
-    });
-    process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
-    return 0;
+    const result = await probe({ appPath: f["app-path"], dataRoot: f["data-root"], root });
+    return { ok: true, ...result };
   }
+
   if (cmd === "prepare-runtime") {
-    const f = flags(rest);
     const result = await prepareRuntime({
-      root: f.root,
+      root,
       offlineDir: f.offline,
       onEvent: (e) => process.stderr.write(JSON.stringify(e) + "\n"),
     });
-    process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
-    return 0;
+    return { ok: true, ...result };
   }
+
   if (cmd === "prepare-query") {
-    const f = flags(rest);
-    const result = await prepareQuery({
-      sourceDir: f.source ?? new URL("../vendor/wechat-decrypt", import.meta.url).pathname,
-      root: f.root,
-    });
-    process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
-    return 0;
+    const source = f.source ?? fileURLToPath(new URL("../vendor/wechat-decrypt", import.meta.url));
+    return { ok: true, ...(await prepareQuery({ sourceDir: source, root })) };
   }
+
   if (cmd === "verify-key") {
-    const f = flags(rest);
     if (!f.db) throw new DeskError("BAD_ARGS", { arg: "--db" });
-    const root = f.root ?? join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
-    // The key is only ever read from a file: never from argv, never printed.
-    const keyFile = f["key-file"] ?? join(root, "query", "key.txt");
-    const key = (await readFile(keyFile, "utf8")).trim();
-    if (!/^[0-9a-f]{64}$/.test(key)) throw new DeskError("BAD_ARGS", { arg: "--key-file" });
-    const result = await verifyKey({ root, key, dbPath: f.db });
-    process.stdout.write(JSON.stringify(result) + "\n");
-    return result.ok ? 0 : 3;
+    // The key is only ever read from a file: never argv, never printed.
+    const key = (await readFile(f["key-file"] ?? join(root, "key.txt"), "utf8")).trim();
+    if (!/^[0-9a-f]{64}$/i.test(key)) throw new DeskError("BAD_ARGS", { arg: "--key-file" });
+    const result = await verifyKey({ root, key: key.toLowerCase(), dbPath: f.db });
+    return { ...result, _code: result.ok ? 0 : 3 };
   }
+
+  throw new DeskError("BAD_ARGS", { cmd });
+}
+
+async function main() {
+  const [, , cmd, ...rest] = process.argv;
+  if (!ALLOWED[cmd]) throw new DeskError("BAD_ARGS", { cmd });
+
   if (cmd === "query") {
     const [op, ...tail] = rest;
-    const f = flags(tail);
-    const root = f.root ?? join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
-    const num = (v) => (v === undefined ? undefined : Number(v));
+    const f = parse(cmd, tail);
     const result = await queryOnce({
-      root,
+      root: f.root ?? DEFAULT_ROOT,
       op,
       value: f.value,
       days: num(f.days),
       limit: num(f.limit),
+      offset: num(f.offset),
     });
-    process.stdout.write(JSON.stringify(result) + "\n");
-    return result.ok ? 0 : 3;
+    return { ...result, _code: result.ok ? 0 : 3 };
   }
-  throw new DeskError("BAD_ARGS", { cmd });
+
+  const { _code, ...result } = await run(cmd, parse(cmd, rest));
+  return { ...result, _code: _code ?? 0 };
 }
 
 main()
-  .then((code) => process.exit(code))
+  .then(({ _code, ...result }) => {
+    // Every outcome is JSON on stdout, so a caller can parse it unconditionally.
+    process.stdout.write(JSON.stringify(result) + "\n");
+    process.exit(_code ?? 0);
+  })
   .catch((err) => {
     const code = err instanceof DeskError ? err.code : "IO_ERROR";
-    process.stderr.write(
-      JSON.stringify({ ok: false, code, message: CODES[code] ?? String(err.message) }) + "\n",
-    );
+    const message = CODES[code] ?? String(err?.message ?? err);
+    process.stdout.write(JSON.stringify({ ok: false, code, message }) + "\n");
+    process.stderr.write(message + "\n");
     process.exit(code === "BAD_ARGS" ? 2 : 3);
   });

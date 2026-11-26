@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { prepareQuery } from "../lib/query-layer.mjs";
 import { verifyKey } from "../lib/verify-key.mjs";
@@ -46,4 +47,26 @@ test("库文件不存在时回 IO_ERROR", async () => {
   const root = await preparedRoot();
   const r = await verifyKey({ root, key: "11".repeat(32), dbPath: join(root, "nope.db") });
   assert.deepEqual(r, { ok: false, code: "IO_ERROR" });
+});
+
+test("库被独占锁定时回 DB_BUSY，而不是 KEY_INVALID", async () => {
+  const root = await preparedRoot();
+  const { dbPath, key, openSql } = await makeSyntheticDb();
+  const holder = spawn("sqlcipher", [dbPath], { stdio: ["pipe", "ignore", "ignore"] });
+  holder.stdin.write(openSql + "BEGIN EXCLUSIVE;\n");
+  await new Promise((r) => setTimeout(r, 600));
+  try {
+    const r = await verifyKey({ root, key, dbPath, timeoutMs: 5000 });
+    assert.deepEqual(r, { ok: false, code: "DB_BUSY" });
+  } finally {
+    holder.kill("SIGKILL");
+  }
+});
+
+test("state 记录微信版本不支持时直接回 UNSUPPORTED_WECHAT", async () => {
+  const root = await preparedRoot();
+  const { mergeState } = await import("../lib/state.mjs");
+  await mergeState(root, { wechat: { version: "4.1.0", supported: false } });
+  const { dbPath, key } = await makeSyntheticDb();
+  assert.deepEqual(await verifyKey({ root, key, dbPath }), { ok: false, code: "UNSUPPORTED_WECHAT" });
 });

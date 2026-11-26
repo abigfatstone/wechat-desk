@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { probe } from "../lib/probe.mjs";
-import { makeApp, makeData } from "./helpers.mjs";
+import { readState } from "../lib/state.mjs";
+import { makeApp, makeData, makeTemp } from "./helpers.mjs";
 
 test("不支持版本标记 supported=false 但仍返回 dbs", async () => {
   const p = await probe({ appPath: await makeApp("4.1.0"), dataRoot: await makeData() });
@@ -25,6 +26,14 @@ test("磁盘不足时 disk.ok=false", async () => {
   const p = await probe({ freeBytes: 1000 });
   assert.equal(p.disk.ok, false);
   assert.equal(p.disk.requiredBytes, 2_500_000_000);
+});
+
+test("给出 root 时把微信版本写进 state，供后续步骤判断", async () => {
+  const root = await makeTemp("desk-root-");
+  await probe({ appPath: await makeApp("4.1.0"), dataRoot: await makeData(), root });
+  const state = await readState(root);
+  assert.equal(state.wechat.version, "4.1.0");
+  assert.equal(state.wechat.supported, false);
 });
 
 test("只取最近修改账号的库，不混入旧账号", async () => {

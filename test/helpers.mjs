@@ -42,16 +42,14 @@ export async function makeSyntheticDb({ messages = 3, rawKey = "11".repeat(32) }
   const raw = Buffer.from(rawKey, "hex");
   const salt = randomBytes(16);
   const derived = pbkdf2Sync(raw, salt, 256000, 32, "sha512").toString("hex");
-  const inserts = Array.from({ length: messages }, (_, i) => `INSERT INTO Msg_1 VALUES (${i});`).join("\n");
-  const sql = [
+  const preamble = [
     `PRAGMA key = "x'${derived}'";`,
     `PRAGMA cipher_salt = "x'${salt.toString("hex")}'";`,
     "PRAGMA kdf_iter = 1;",
     "PRAGMA cipher_compatibility = 4;",
-    "CREATE TABLE Msg_1(id INTEGER);",
-    inserts,
-    "",
-  ].join("\n");
+  ];
+  const inserts = Array.from({ length: messages }, (_, i) => `INSERT INTO Msg_1 VALUES (${i});`).join("\n");
+  const sql = [...preamble, "CREATE TABLE Msg_1(id INTEGER);", inserts, ""].join("\n");
   await new Promise((resolve, reject) => {
     const child = spawn("sqlcipher", [dbPath], { stdio: ["pipe", "pipe", "pipe"] });
     let stderr = "";
@@ -60,5 +58,5 @@ export async function makeSyntheticDb({ messages = 3, rawKey = "11".repeat(32) }
     child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(stderr || `sqlcipher exit ${code}`))));
     child.stdin.end(sql);
   });
-  return { dbPath, key: rawKey };
+  return { dbPath, key: rawKey, openSql: preamble.join("\n") + "\n" };
 }

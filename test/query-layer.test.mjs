@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { prepareQuery } from "../lib/query-layer.mjs";
 import { makeTemp } from "./helpers.mjs";
@@ -51,6 +51,29 @@ test("不复制私有状态文件", async () => {
   assert.equal(listed.includes("key.txt="), false);
   await assert.rejects(() => readFile(join(r.root, "query", "key.txt")), (e) => e.code === "ENOENT");
   await assert.rejects(() => readFile(join(r.root, "query", "all_keys.json")), (e) => e.code === "ENOENT");
+});
+
+test("重复 prepareQuery 不删除已有 key", async () => {
+  const root = await makeTemp("desk-root-");
+  const key = "ab".repeat(32);
+  await writeFile(join(root, "key.txt"), key + "\n");
+  const sourceDir = await fixtureUpstream();
+
+  await prepareQuery({ sourceDir, root });
+  await prepareQuery({ sourceDir, root });
+
+  assert.equal((await readFile(join(root, "key.txt"), "utf8")).trim(), key);
+  assert.equal(await readlink(join(root, "query", "key.txt")), join(root, "key.txt"));
+});
+
+test("查询层不能运行时回 NO_QUERY_LAYER", async () => {
+  const root = await makeTemp("desk-root-");
+  const sourceDir = await fixtureUpstream();
+  await writeFile(join(sourceDir, "scripts/common/query.py"), "def broken(:\n");
+  await assert.rejects(
+    () => prepareQuery({ sourceDir, root }),
+    (err) => err.code === "NO_QUERY_LAYER",
+  );
 });
 
 test("无 key 时查询入口回结构化错误而不是崩溃", async () => {
