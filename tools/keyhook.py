@@ -85,22 +85,39 @@ def main():
         return fail(state_path, "HOOK_MISSING")
 
     captured = {}
+    log_path = os.path.join(args.root, "keyhook.log")
+
+    def note(text):
+        # Diagnostics only: RAW_KEY is stripped before it can reach the file.
+        safe = re.sub(r"[a-f0-9]{64}", "<key>", text)[:400]
+        try:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(safe + "\n")
+        except OSError:
+            pass
 
     def on_message(message, _data):
         blob = json.dumps(message, default=str)
+        note(blob)
         found = re.search(r"RAW_KEY=([a-f0-9]{64})", blob)
         if found and "key" not in captured:
             captured["key"] = found.group(1)
 
     try:
+        note("step=frida-import-ok")
         device = frida.get_local_device()
+        note("step=device " + repr(device))
         pid = device.spawn([args.app])
+        note("step=spawned " + str(pid))
         session = device.attach(pid)
+        note("step=attached")
         with open(args.hook, encoding="utf-8") as fh:
             script = session.create_script(fh.read())
         script.on("message", on_message)
         script.load()
+        note("step=script-loaded")
         device.resume(pid)
+        note("step=resumed")
     except Exception:
         return fail(state_path, "SPAWN_FAILED")
 

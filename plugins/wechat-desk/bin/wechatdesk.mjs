@@ -132,7 +132,7 @@ async function run(cmd, f, action) {
     }
     if (action === "start") {
       const appBin = join(root, "wechat-copy", "WeChat.app", "Contents", "MacOS", "WeChat");
-      const hook = f.hook ?? fileURLToPath(new URL("../vendor/wechat-decrypt/scripts/macos/hook_pbkdf.js", import.meta.url));
+      const hook = f.hook ?? fileURLToPath(new URL("../tools/hook_pbkdf.js", import.meta.url));
       return { ok: true, ...(await startKeyhook({ root, appBin, hookPath: hook, timeoutSec: num(f.timeout) })) };
     }
     if (action === "wait") {

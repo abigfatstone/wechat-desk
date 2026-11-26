@@ -71,9 +71,15 @@ export default {
       let delay = 1000;
       while (!controller.signal.aborted) {
         try {
-          const result = await serveOnce({ ilink: api, binding, state, answer });
+          // Persist inside serveOnce: the queue must survive a failed answer.
+          const result = await serveOnce({
+            ilink: api,
+            binding,
+            state,
+            answer,
+            save: (next) => mergeState(ROOT, { ilink: next }),
+          });
           state = result.state;
-          await mergeState(ROOT, { ilink: state });
           delay = 1000;
           await sleep(200);
         } catch (err) {

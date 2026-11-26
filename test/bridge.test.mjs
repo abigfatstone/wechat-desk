@@ -93,3 +93,79 @@ test("空消息或语音转写缺失时回一句提示", async () => {
   assert.equal(f.asked.length, 0);
   assert.match(f.sent[0].text, /文字/);
 });
+
+test("回答失败时消息留在 pending，下一轮重试成功后只回一次", async () => {
+  const page = { msgs: [msg()], get_updates_buf: "c1" };
+  const f = fakes(page);
+  let fail = true;
+  const answer = async (q) => {
+    if (fail) throw Error("model down");
+    return f.answer(q);
+  };
+  const first = await serveOnce({ ilink: f.ilink, binding: BINDING, state: { bot: "b1", seen: [], cursor: "" }, answer });
+  assert.equal(f.sent.length, 0);
+  assert.equal(first.state.pending.length, 1);
+  assert.equal(first.state.pending[0].attempts, 1);
+  assert.equal(first.state.seen.length, 0);
+
+  fail = false;
+  const second = await serveOnce({ ilink: f.ilink, binding: BINDING, state: first.state, answer });
+  assert.equal(f.sent.length, 1);
+  assert.equal(second.state.pending.length, 0);
+  assert.equal(second.state.seen.length, 1);
+});
+
+test("发送失败（非 -14）也留在 pending 里重试", async () => {
+  const page = { msgs: [msg()], get_updates_buf: "c1" };
+  const sent = [];
+  let failSend = true;
+  const ilink = {
+    poll: async () => page,
+    send: async (b, text) => {
+      if (failSend) throw Object.assign(Error("network"), { code: -1 });
+      sent.push(text);
+    },
+  };
+  const answer = async () => "答案";
+  const first = await serveOnce({ ilink, binding: BINDING, state: { bot: "b1", seen: [], cursor: "" }, answer });
+  assert.equal(first.state.pending.length, 1);
+  assert.equal(sent.length, 0);
+
+  failSend = false;
+  await serveOnce({ ilink, binding: BINDING, state: first.state, answer });
+  assert.equal(sent.length, 1);
+});
+
+test("重试超过上限后丢弃，避免无限重放", async () => {
+  const page = { msgs: [msg()], get_updates_buf: "c1" };
+  const f = fakes(page);
+  const answer = async () => {
+    throw Error("always down");
+  };
+  let state = { bot: "b1", seen: [], cursor: "" };
+  for (let i = 0; i < 5; i++) {
+    const r = await serveOnce({ ilink: f.ilink, binding: BINDING, state, answer });
+    state = r.state;
+  }
+  assert.equal(state.pending.length, 0);
+  assert.equal(state.seen.length, 1);
+});
+
+test("处理前先落盘：第一轮 save 就包含 cursor 与 pending", async () => {
+  const page = { msgs: [msg()], get_updates_buf: "c9" };
+  const f = fakes(page);
+  const saves = [];
+  const answer = async () => {
+    throw Error("down");
+  };
+  await serveOnce({
+    ilink: f.ilink,
+    binding: BINDING,
+    state: { bot: "b1", seen: [], cursor: "" },
+    answer,
+    save: async (s) => saves.push(JSON.parse(JSON.stringify(s))),
+  });
+  assert.ok(saves.length >= 1);
+  assert.equal(saves[0].cursor, "c9");
+  assert.equal(saves[0].pending.length, 1);
+});
