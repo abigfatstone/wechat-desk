@@ -4,6 +4,7 @@ import { probe } from "../lib/probe.mjs";
 import { prepareRuntime } from "../lib/runtime.mjs";
 import { prepareQuery } from "../lib/query-layer.mjs";
 import { verifyKey } from "../lib/verify-key.mjs";
+import { queryOnce } from "../lib/query.mjs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -60,6 +61,21 @@ async function main() {
     const key = (await readFile(keyFile, "utf8")).trim();
     if (!/^[0-9a-f]{64}$/.test(key)) throw new DeskError("BAD_ARGS", { arg: "--key-file" });
     const result = await verifyKey({ root, key, dbPath: f.db });
+    process.stdout.write(JSON.stringify(result) + "\n");
+    return result.ok ? 0 : 3;
+  }
+  if (cmd === "query") {
+    const [op, ...tail] = rest;
+    const f = flags(tail);
+    const root = f.root ?? join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
+    const num = (v) => (v === undefined ? undefined : Number(v));
+    const result = await queryOnce({
+      root,
+      op,
+      value: f.value,
+      days: num(f.days),
+      limit: num(f.limit),
+    });
     process.stdout.write(JSON.stringify(result) + "\n");
     return result.ok ? 0 : 3;
   }
