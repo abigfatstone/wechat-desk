@@ -1,13 +1,22 @@
 {
-  "name": "wechat-history-marketplace",
-  "interface": { "displayName": "微信工作台" },
+  "name": "wechat-desk-marketplace",
+  "interface": {
+    "displayName": "微信工作台"
+  },
   "plugins": [
     {
       "name": "wechat-desk",
-      "interface": { "displayName": "微信工作台" },
-      "version": "0.2.0",
-      "source": "./plugins/wechat-desk",
-      "description": "ClawBot 提问、授权历史查询、工作区答复和回复草稿"
+      "source": {
+        "source": "local",
+        "path": "plugins/wechat-desk"
+      },
+      "version": "0.3.0",
+      "description": "把本机微信聊天记录变成可查询的历史：微信里直接问，答案带会话与时间。只读，数据不出本机。",
+      "category": "Productivity",
+      "interface": {
+        "displayName": "微信工作台",
+        "shortDescription": "在微信里查自己的聊天历史，只读、本机、可引用"
+      }
     }
   ]
 }

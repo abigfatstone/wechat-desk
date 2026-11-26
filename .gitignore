@@ -4,6 +4,10 @@ key.txt
 key_windows.txt
 all_keys.json
 state.json
+keyhook.json
+binding.json
+grant.json
+*.log
 .venv/
 .superpowers/
 .DS_Store

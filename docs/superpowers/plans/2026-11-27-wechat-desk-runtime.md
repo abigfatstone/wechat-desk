@@ -48,7 +48,7 @@
 
 - [ ] **Step 1: 初始化仓库**
 
-`/Users/code/wechat-desk` 目前不是 git 仓库。先 `git init`，用 `.gitignore` 排除 `node_modules/`、`decrypted/`、`key.txt`、`state.json`、`.venv/`，提交当前 0.2.0 代码作为基线。
+本仓库当时还不是 git 仓库。先 `git init`，用 `.gitignore` 排除 `node_modules/`、`decrypted/`、`key.txt`、`state.json`、`.venv/`，提交当前 0.2.0 代码作为基线。
 
 - [ ] **Step 2: 写失败测试**
 
