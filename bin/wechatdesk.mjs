@@ -8,6 +8,9 @@ import { prepareRuntime } from "../lib/runtime.mjs";
 import { prepareQuery } from "../lib/query-layer.mjs";
 import { verifyKey } from "../lib/verify-key.mjs";
 import { queryOnce } from "../lib/query.mjs";
+import { prepareCopy } from "../lib/bundle.mjs";
+import { signCopy } from "../lib/sign.mjs";
+import { keyStatus, startKeyhook, waitForKey } from "../lib/keyflow.mjs";
 
 const DEFAULT_ROOT = join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
 
@@ -20,6 +23,7 @@ const ALLOWED = {
   "prepare-runtime": ["root", "offline", "json"],
   "prepare-query": ["root", "source", "json"],
   "verify-key": ["root", "db", "key-file", "json"],
+  key: ["root", "app-path", "hook", "timeout", "timeout-ms", "free-bytes", "json"],
   query: ["root", "value", "days", "limit", "offset", "json"],
 };
 
@@ -45,7 +49,7 @@ function parse(cmd, argv) {
 
 const num = (v) => (v === undefined ? undefined : Number(v));
 
-async function run(cmd, f) {
+async function run(cmd, f, action) {
   const root = f.root ?? DEFAULT_ROOT;
 
   if (cmd === "probe") {
@@ -76,12 +80,40 @@ async function run(cmd, f) {
     return { ...result, _code: result.ok ? 0 : 3 };
   }
 
+  if (cmd === "key") {
+    const root = f.root ?? DEFAULT_ROOT;
+
+    if (action === "prepare") {
+      const copy = await prepareCopy({ root, appPath: f["app-path"], freeBytes: num(f["free-bytes"]) });
+      const signed = await signCopy(copy.copyPath);
+      return { ok: true, ...copy, ...signed };
+    }
+    if (action === "start") {
+      const appBin = join(root, "wechat-copy", "WeChat.app", "Contents", "MacOS", "WeChat");
+      const hook = f.hook ?? fileURLToPath(new URL("../vendor/wechat-decrypt/scripts/macos/hook_pbkdf.js", import.meta.url));
+      return { ok: true, ...(await startKeyhook({ root, appBin, hookPath: hook, timeoutSec: num(f.timeout) })) };
+    }
+    if (action === "wait") {
+      return { ...(await waitForKey({ root, timeoutMs: num(f["timeout-ms"]) })) };
+    }
+    if (action === "status") {
+      return { ok: true, ...(await keyStatus(root)) };
+    }
+    throw new DeskError("BAD_ARGS", { arg: action });
+  }
+
   throw new DeskError("BAD_ARGS", { cmd });
 }
 
 async function main() {
   const [, , cmd, ...rest] = process.argv;
   if (!ALLOWED[cmd]) throw new DeskError("BAD_ARGS", { cmd });
+
+  if (cmd === "key") {
+    const [action, ...tail] = rest;
+    const result = await run("key", parse("key", tail), action);
+    return { ...result, _code: result.ok === false ? 3 : 0 };
+  }
 
   if (cmd === "query") {
     const [op, ...tail] = rest;
