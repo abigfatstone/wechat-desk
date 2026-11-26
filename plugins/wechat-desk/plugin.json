@@ -1,6 +1,11 @@
 {
   "name": "wechat-desk",
-  "version": "0.2.0",
-  "description": "在授权的本机 workspace 查询微信资料，由 ClawBot 收取提问、送回答案与回复草稿。",
-  "interface": { "displayName": "微信工作台", "category": "Productivity" }
+  "version": "0.3.0",
+  "description": "把本机微信聊天记录变成可查询的历史：微信里直接问，答案带会话与时间。只读，数据不出本机。",
+  "interface": {
+    "displayName": "微信工作台",
+    "category": "Productivity"
+  },
+  "author": "",
+  "homepage": ""
 }

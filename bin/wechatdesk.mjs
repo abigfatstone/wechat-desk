@@ -11,6 +11,10 @@ import { queryOnce } from "../lib/query.mjs";
 import { prepareCopy } from "../lib/bundle.mjs";
 import { signCopy } from "../lib/sign.mjs";
 import { keyStatus, startKeyhook, waitForKey } from "../lib/keyflow.mjs";
+import { ilink } from "../lib/ilink.mjs";
+import { loadBinding, publicBinding, saveBinding } from "../lib/binding.mjs";
+import { createRequire } from "node:module";
+import { createInterface } from "node:readline/promises";
 
 const DEFAULT_ROOT = join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
 
@@ -24,6 +28,7 @@ const ALLOWED = {
   "prepare-query": ["root", "source", "json"],
   "verify-key": ["root", "db", "key-file", "json"],
   key: ["root", "app-path", "hook", "timeout", "timeout-ms", "free-bytes", "json"],
+  bind: ["root", "json"],
   query: ["root", "value", "days", "limit", "offset", "json"],
 };
 
@@ -80,6 +85,26 @@ async function run(cmd, f, action) {
     return { ...result, _code: result.ok ? 0 : 3 };
   }
 
+  if (cmd === "bind") {
+    const existing = await loadBinding(root);
+    const rl = process.stdin.isTTY ? createInterface({ input: process.stdin, output: process.stderr }) : null;
+    const qr = createRequire(import.meta.url)("../plugins/wechat-desk/vendor/qr.cjs");
+    try {
+      const binding = await ilink().bind({
+        previous: existing,
+        show: async (url) => {
+          process.stderr.write(url + "\n");
+          qr.generate(url, { small: true });
+        },
+        pin: async () => (rl ? (await rl.question("输入微信显示的数字：")).trim() : ""),
+      });
+      await saveBinding(root, binding);
+      return { ok: true, ...publicBinding(binding) };
+    } finally {
+      rl?.close();
+    }
+  }
+
   if (cmd === "key") {
     const root = f.root ?? DEFAULT_ROOT;
 
@@ -129,7 +154,7 @@ async function main() {
     return { ...result, _code: result.ok ? 0 : 3 };
   }
 
-  const { _code, ...result } = await run(cmd, parse(cmd, rest));
+  const { _code, ...result } = await run(cmd, parse(cmd, rest), rest[0]);
   return { ...result, _code: _code ?? 0 };
 }
 
@@ -141,7 +166,7 @@ main()
   })
   .catch((err) => {
     const code = err instanceof DeskError ? err.code : "IO_ERROR";
-    const message = CODES[code] ?? String(err?.message ?? err);
+    const message = err instanceof DeskError ? CODES[code] : String(err?.message ?? err);
     process.stdout.write(JSON.stringify({ ok: false, code, message }) + "\n");
     process.stderr.write(message + "\n");
     process.exit(code === "BAD_ARGS" ? 2 : 3);
