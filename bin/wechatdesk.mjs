@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { CODES, DeskError } from "../lib/errors.mjs";
 import { probe } from "../lib/probe.mjs";
+import { prepareRuntime } from "../lib/runtime.mjs";
 
 const [, , cmd, ...rest] = process.argv;
 
@@ -23,6 +24,16 @@ async function main() {
     const result = await probe({
       appPath: f["app-path"],
       dataRoot: f["data-root"],
+    });
+    process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
+    return 0;
+  }
+  if (cmd === "prepare-runtime") {
+    const f = flags(rest);
+    const result = await prepareRuntime({
+      root: f.root,
+      offlineDir: f.offline,
+      onEvent: (e) => process.stderr.write(JSON.stringify(e) + "\n"),
     });
     process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
     return 0;
