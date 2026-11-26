@@ -59,7 +59,15 @@ node bin/wechatdesk.mjs query search --root "$HOME/Library/Application Support/W
 node bin/wechatdesk.mjs bind --root "$HOME/Library/Application Support/WeChatDesk"
 ```
 
-扫码后微信里会多一个机器人联系人。它只回答你本人的私聊，群消息和陌生人一律忽略。回答需要模型，模型只在零点（Zero）进程内，所以机器人常驻依赖宿主在运行。
+扫码后微信里会多一个机器人联系人。它只回答你本人的私聊，群消息和陌生人一律忽略。
+
+让它在零点里常驻（不需要任何后台服务或定时任务）：
+
+```bash
+node bin/wechatdesk.mjs install --workspace <你的工作区目录>
+```
+
+这会在工作区写一行 `.opencode/plugins/wechat-desk/index.ts`，零点加载该工作区时插件即在进程内跑起来。回答需要模型，模型只在零点进程里，所以把零点设为登录启动项就够了。
 
 ## 安全模型
 

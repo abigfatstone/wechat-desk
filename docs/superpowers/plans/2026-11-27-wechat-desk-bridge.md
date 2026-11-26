@@ -4,7 +4,7 @@
 
 **Goal:** 插件启用后常驻：微信里发一句话，本机查询历史并回一段带出处的答案；宿主关掉窗口、跨对话轮次都不影响。
 
-**Architecture:** `ilink`（微信 bot 通道，可注入 fetch 便于测试）→ `bridge`（轮询、去重、调用注入的 answer、回发）→ `supervisor`（用户级 LaunchAgent 保活）→ 插件胶水（注册工具、启动服务）。回答要模型，模型 API 只在零点进程内，所以常驻的是「宿主 + 工作区」，不是另起一个进程。
+**Architecture:** `ilink`（微信 bot 通道，可注入 fetch 便于测试）→ `bridge`（轮询、去重、调用注入的 answer、回发）→ `workspace-adapter`（写一行适配文件，让宿主加载插件）→ 插件胶水（注册工具、启动服务）。回答要模型，模型 API 只在零点进程内，所以常驻的是「宿主 + 工作区」，不是另起一个进程。
 
 **Spec:** `docs/superpowers/specs/2026-11-27-one-click-wechat-desk-design.md` §4
 
@@ -33,8 +33,8 @@
 ### Task 2: 桥接循环
 `lib/bridge.mjs`：`serveOnce({ilink, binding, state, answer, now})` → `{state, sent, skipped}`。去重键 `hash(bot + message_id)`，先落盘 seen 再发送；`from_user_id` 不匹配或 `group_id` 存在则跳过；`-14` 抛 `BIND_EXPIRED`。测试：重复消息只回一次、陌生人被忽略、-14 终止、截断 1900。
 
-### Task 3: 常驻与保活
-`lib/supervisor.mjs`：`launchAgentPlist({label, program, args, root})` 纯函数 + `install/uninstall`（写 `~/Library/LaunchAgents/<label>.plist`，`RunAtLoad` + `KeepAlive`）。测试只断言 plist 内容与路径，不真的 load。
+### Task 3: 常驻（工作区适配器）
+`lib/workspace-adapter.mjs`：写 `<workspace>/.opencode/plugins/wechat-desk/index.ts`，内容是一行带标记的 `export { default } from "<插件入口>"`；幂等、不覆盖别人的文件、卸载只删自己的。**不用 LaunchAgent**：模型只在零点进程内，自建服务只能收消息不能回答。
 
 ### Task 4: 插件胶水
 `plugins/wechat-desk/zero.mjs` 改为：读 `<root>/grant.json`，注册 `wechat_history_query` 工具（复用 `lib/query.mjs`），并启动 `bridge`；`answer()` 用 `ctx.session.generate`。`openclaw.mjs` 不再作为入口（保留文件不影响零点的加载）。
@@ -43,4 +43,4 @@
 `bin/wechatdesk.mjs bind` —— 调 `ilink.bind`，二维码以文本渲染到终端，凭证写 `<root>/binding.json`（0600）。
 
 ## 验收
-`node --test test/*.test.mjs` 全绿；用假 fetch 跑通「一条消息 → 一次查询 → 一条回复」；LaunchAgent plist 与实际 `launchctl list` 一一对应（手动一次）。
+`node --test test/*.test.mjs` 全绿；用假 fetch 跑通「一条消息 → 一次查询 → 一条回复」；适配器写入后零点加载该工作区，插件 `setup()` 被执行（手动一次）。

@@ -13,6 +13,7 @@ import { signCopy } from "../lib/sign.mjs";
 import { keyStatus, startKeyhook, waitForKey } from "../lib/keyflow.mjs";
 import { ilink } from "../lib/ilink.mjs";
 import { loadBinding, publicBinding, saveBinding } from "../lib/binding.mjs";
+import { adapterInstalled, installAdapter, removeAdapter } from "../lib/workspace-adapter.mjs";
 import { createRequire } from "node:module";
 import { createInterface } from "node:readline/promises";
 
@@ -29,6 +30,8 @@ const ALLOWED = {
   "verify-key": ["root", "db", "key-file", "json"],
   key: ["root", "app-path", "hook", "timeout", "timeout-ms", "free-bytes", "json"],
   bind: ["root", "json"],
+  install: ["root", "workspace", "entry", "json"],
+  uninstall: ["workspace", "json"],
   query: ["root", "value", "days", "limit", "offset", "json"],
 };
 
@@ -103,6 +106,20 @@ async function run(cmd, f, action) {
     } finally {
       rl?.close();
     }
+  }
+
+  if (cmd === "install") {
+    if (!f.workspace) throw new DeskError("BAD_ARGS", { arg: "--workspace" });
+    const entry = f.entry ?? fileURLToPath(new URL("../plugins/wechat-desk/zero.mjs", import.meta.url));
+    const { adapter } = await installAdapter({ workspace: f.workspace, entry });
+    // Residency comes from the host that owns the model: loading this workspace
+    // runs the plugin inside Zero. No daemon, no launchd.
+    return { ok: true, adapter, next: "在零点打开这个工作区，插件即常驻；建议把零点设为登录启动项。" };
+  }
+
+  if (cmd === "uninstall") {
+    if (!f.workspace) throw new DeskError("BAD_ARGS", { arg: "--workspace" });
+    return { ok: true, ...(await removeAdapter({ workspace: f.workspace })) };
   }
 
   if (cmd === "key") {

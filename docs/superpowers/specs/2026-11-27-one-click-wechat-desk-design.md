@@ -191,15 +191,14 @@ agent 读 playbook 开始装。用户看到的是 agent 在做事，可以随时
   在市场里停用插件 → 查询与轮询立即停止，不需要用户再点撤销。
 - key 放在版本目录之外的 `~/Library/Application Support/WeChatDesk/key.txt`
   （0600），升级不丢；`current` 软链只指向运行时本身。
-- **启用即常驻**（硬要求）：插件 enabled 就必须一直能收消息，不依赖用户
-  打开某个工作区。实现：用户级 LaunchAgent 跑一个 supervisor，负责
-  (a) 登录后拉起零点、异常退出时重启（用户主动退出不抢）；
-  (b) 确保 `wechat-desk` 工作区被实例化（深链 / AppleScript / 宿主参数，
-  实施时定）；
-  (c) 持有 receiver 锁，保证只有一个接收端。
-  如果实施时确认宿主无法从外部实例化工作区，降级为「零点运行且该工作区
-  打开过」，并在 `/wechat-desk-status` 里直说，不假装常驻。
-- 停用插件 → supervisor 卸下 LaunchAgent，轮询与查询同时停止。
+- **启用即常驻，靠工作区适配器**（推翻初版的 LaunchAgent 方案）：市场安装只加载
+  skills/commands/MCP，不加载 JS 入口，所以由 agent 在安装时写一行
+  `<workspace>/.opencode/plugins/wechat-desk/index.ts` 再导出插件入口。宿主加载
+  该工作区即执行插件 `setup()`，常驻循环、工具与模型调用都在零点进程内。
+- **不做 launchd / supervisor**：回答要模型，模型只在零点进程里；脱离零点的
+  常驻进程只能收消息、不能回答，是半成品。零点没启动时本来就答不了，正确做法
+  是把零点设为登录启动项，而不是自建一个服务去拉它。
+- 停用插件 → 删除适配器文件，轮询与查询同时停止。
 - A2A 委派保留；peer 别名与 Agent UUID 由 agent 在会话里收集后写进
   `grant.json`（见 §6）。
 
@@ -247,8 +246,7 @@ agent 读 playbook 开始装。用户看到的是 agent 在做事，可以随时
 
 - 运行时用 python-build-standalone 还是直接把查询层用 Node 重写（后者能
   去掉 40 MB 与 Python 依赖，但等于重写 SQLCipher 访问层）。
-- LaunchAgent 是否值得加：只为在零点未启动时排队消息，代价是新增一个
-  常驻进程与权限面。
+- 已决定不加 LaunchAgent（见 §4）：自建常驻进程拿不到模型，只能排队消息。
 - 静态 SQLCipher 的来源与更新策略（自建构建 vs 可信第三方产物）。
 - skill 里哪些步骤允许 agent 自行决定、哪些必须用户点头，护栏已给底线，
   细化到步骤粒度留给构建者。
