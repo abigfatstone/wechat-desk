@@ -10,6 +10,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # The query layer needs 3.10+; macOS runners ship an older CLT python3.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: SQLCipher
         run: brew install sqlcipher
       - name: Tests

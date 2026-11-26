@@ -44,7 +44,7 @@ test("只取最近修改账号的库，不混入旧账号", async () => {
   await writeFile(`${fresh}/message_0.db`, Buffer.alloc(16, 9));
   const now = new Date();
   await utimes(`${fresh}/message_0.db`, now, now);
-  const p = await probe({ dataRoot });
+  const p = await probe({ dataRoot, appPath: await makeApp("4.2.0") });
   assert.deepEqual(
     p.wechat.dbs.map((d) => d.path.endsWith("/acct-new/db_storage/message/message_0.db")),
     [true],
