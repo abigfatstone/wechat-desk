@@ -3,6 +3,9 @@ import { CODES, DeskError } from "../lib/errors.mjs";
 import { probe } from "../lib/probe.mjs";
 import { prepareRuntime } from "../lib/runtime.mjs";
 import { prepareQuery } from "../lib/query-layer.mjs";
+import { verifyKey } from "../lib/verify-key.mjs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const [, , cmd, ...rest] = process.argv;
 
@@ -47,6 +50,18 @@ async function main() {
     });
     process.stdout.write(JSON.stringify({ ok: true, ...result }, null, 2) + "\n");
     return 0;
+  }
+  if (cmd === "verify-key") {
+    const f = flags(rest);
+    if (!f.db) throw new DeskError("BAD_ARGS", { arg: "--db" });
+    const root = f.root ?? join(process.env.HOME ?? ".", "Library/Application Support/WeChatDesk");
+    // The key is only ever read from a file: never from argv, never printed.
+    const keyFile = f["key-file"] ?? join(root, "query", "key.txt");
+    const key = (await readFile(keyFile, "utf8")).trim();
+    if (!/^[0-9a-f]{64}$/.test(key)) throw new DeskError("BAD_ARGS", { arg: "--key-file" });
+    const result = await verifyKey({ root, key, dbPath: f.db });
+    process.stdout.write(JSON.stringify(result) + "\n");
+    return result.ok ? 0 : 3;
   }
   throw new DeskError("BAD_ARGS", { cmd });
 }
