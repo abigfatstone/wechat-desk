@@ -1,0 +1,13 @@
+{
+  "name": "wechat-history-marketplace",
+  "interface": { "displayName": "微信工作台" },
+  "plugins": [
+    {
+      "name": "wechat-desk",
+      "interface": { "displayName": "微信工作台" },
+      "version": "0.2.0",
+      "source": "./plugins/wechat-desk",
+      "description": "ClawBot 提问、授权历史查询、工作区答复和回复草稿"
+    }
+  ]
+}

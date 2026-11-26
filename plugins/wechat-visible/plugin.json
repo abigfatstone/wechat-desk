@@ -1,0 +1,1 @@
+{"name":"wechat-visible","version":"0.1.0","interface":{"displayName":"微信当前窗口（Mac）"},"description":"在指定 workspace 注册只读工具，使用 macOS Vision 识别当前微信窗口右侧可见文字。"}

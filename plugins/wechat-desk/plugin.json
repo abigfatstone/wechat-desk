@@ -1,0 +1,6 @@
+{
+  "name": "wechat-desk",
+  "version": "0.2.0",
+  "description": "在授权的本机 workspace 查询微信资料，由 ClawBot 收取提问、送回答案与回复草稿。",
+  "interface": { "displayName": "微信工作台", "category": "Productivity" }
+}

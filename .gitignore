@@ -1,0 +1,9 @@
+node_modules/
+decrypted/
+key.txt
+key_windows.txt
+all_keys.json
+state.json
+.venv/
+.superpowers/
+.DS_Store

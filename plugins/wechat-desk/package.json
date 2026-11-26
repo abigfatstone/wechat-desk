@@ -1,0 +1,14 @@
+{
+  "name": "zero-wechat-desk",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "openclaw": {
+    "extensions": [
+      "./openclaw.mjs"
+    ]
+  }
+}

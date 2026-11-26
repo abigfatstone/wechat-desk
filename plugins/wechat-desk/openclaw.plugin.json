@@ -1,0 +1,12 @@
+{
+  "id": "wechat-desk",
+  "name": "微信工作台",
+  "description": "为已绑定的微信 ClawBot 提供本机历史查询工具。",
+  "activation": { "onStartup": true },
+  "contracts": { "tools": ["wechat_history_query"] },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
