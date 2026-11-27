@@ -5,6 +5,7 @@ import { loadBinding } from "./lib/binding.mjs";
 import { serveOnce } from "./lib/bridge.mjs";
 import { ilink } from "./lib/ilink.mjs";
 import { mergeState, readState } from "./lib/state.mjs";
+import { planFromQuestion } from "./lib/plan.mjs";
 
 const ROOT = join(homedir(), "Library/Application Support/WeChatDesk");
 const SYSTEM = `你是微信工作台。根据提供的本机聊天资料回答主人的问题。
@@ -50,21 +51,50 @@ export default {
     const api = ilink();
 
     const answer = async (question) => {
-      const plan = await ctx.session.generate({
-        prompt: `今天是 ${new Date().toLocaleDateString("sv-SE")}。把下面的请求转成一次微信检索：只返回 JSON {op,value,days,limit}。请求：${JSON.stringify(question)}`,
-      });
-      let query = { op: "search", value: question.slice(0, 180), days: 7, limit: 30 };
+      // The model turns the question into a query plan; without it we fall back
+      // to a deterministic plan. Either way the answer is built from what is
+      // actually in the database — never from the question alone.
+      let plan = planFromQuestion(question);
       try {
-        query = JSON.parse(String(plan?.text ?? plan).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        const draft = await ctx.session.generate({
+          prompt: `今天是 ${new Date().toLocaleDateString("sv-SE")}。把下面的请求转成一次微信检索：只返回 JSON {op,value,days,limit}。请求：${JSON.stringify(question)}`,
+        });
+        const parsed = JSON.parse(String(draft?.text ?? draft).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        if (parsed && typeof parsed === "object") plan = parsed;
       } catch {
-        /* keep the literal search: a bad plan must not turn into silence */
+        /* keep the deterministic plan */
       }
-      const data = await queryOnce({ root: ROOT, ...query });
-      if (!data.ok) return `查询没有完成（${data.code}）。可以在零点里再试一次。`;
-      const draft = await ctx.session.generate({
-        prompt: `${SYSTEM}\n问题：${JSON.stringify(question)}\n数据：${JSON.stringify(data.data)}`,
-      });
-      return String(draft?.text ?? draft ?? "").trim() || "这次没有找到可引用的记录。";
+
+      const data = await queryOnce({ root: ROOT, ...plan });
+      if (!data.ok) {
+        return data.code === "KEY_INVALID"
+          ? "读不到微信库（key 可能已失效）。在零点里重跑一次取 key 即可。"
+          : `查询没有完成（${data.code}）。可以在零点里再试一次。`;
+      }
+
+      const hits = data.data?.messages ?? [];
+      if (plan.op === "search" && hits.length === 0) {
+        return `最近 ${plan.days} 天没有搜到「${plan.value}」。换个说法或放宽时间范围可以再试。`;
+      }
+      if (!hits.length && plan.op !== "list") {
+        return `最近 ${plan.days} 天没有拿到可引用的记录。`;
+      }
+
+      try {
+        const draft = await ctx.session.generate({
+          prompt: `${SYSTEM}\n问题：${JSON.stringify(question)}\n数据：${JSON.stringify(data.data)}`,
+        });
+        const text = String(draft?.text ?? draft ?? "").trim();
+        if (text) return text;
+      } catch {
+        /* fall through to the plain digest */
+      }
+
+      // No model: report exactly what was found, with source labels, and stop.
+      return [
+        `共 ${hits.length} 条（最近 ${plan.days} 天）：`,
+        ...hits.slice(0, 8).map((h) => `· ${h.time} ${h.contact} ${h.direction ?? ""}：${String(h.content).slice(0, 80)}`),
+      ].join("\n");
     };
 
     const job = (async () => {
